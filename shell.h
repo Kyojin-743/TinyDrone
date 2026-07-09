@@ -89,5 +89,6 @@ int32_t atoi32(const char* str);
 void itoa32(uint32_t num, char str[MAX_DIG_U32]);
 void htoa(uint32_t num, char str[MAX_DIG_U32]);
 inline int min(int l, int r);
+int usprintf(char *buffer, const char *format, ...);
 
 #endif /* SHELL_H_ */

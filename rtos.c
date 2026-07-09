@@ -56,10 +56,11 @@ int main(void)
     ok &= initMutex(mutex_bus_i2c1);
     ok &= initMutex(mutex_bus_spi1);
 
+    ok &= initSemaphore(semaphore_mpu_data_ready, 0);
+
     // Add required idle process at lowest priority
     ok &= createThread(idle, "Idle", 7, 512);
-    ok &= createThread(task_estimate_attitude,"attitude", 0, ceil512(2000));
-    ok &= createThread(task_control_motors, "pid", 0, ceil512(1000));
+    ok &= createThread(task_ahrs_pid,"attitude", 0, ceil512(2000));
     ok &= createThread(task_receive_input, "rc", 2, ceil512(1000));
     ok &= createThread(task_send_telem, "tlem", 2, ceil512(500));
 

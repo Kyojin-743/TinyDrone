@@ -36,6 +36,8 @@ typedef void (*_fn)();
 #define mutex_bus_i2c1          0
 #define mutex_bus_spi1          1
 
+#define semaphore_mpu_data_ready 0
+
 // semaphore
 #define MAX_SEMAPHORES              1
 #define MAX_SEMAPHORE_QUEUE_SIZE    1

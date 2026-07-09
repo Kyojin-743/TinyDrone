@@ -18,9 +18,7 @@
 void initTaskHw(void);
 
 //TODO: Add prototypes for tasks
-void task_estimate_attitude(void);
-void task_control_motors(void);
-void task_read_slow_sensors(void);
+void task_ahrs_pid(void);
 void task_receive_input(void);
 void task_send_telem(void);
 void idle(void);

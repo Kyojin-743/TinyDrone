@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include "tm4c123gh6pm.h"
 #include "clock.h"
 #include "uart0.h"
@@ -239,4 +240,194 @@ inline int min(int l, int r)
 {
     bool lt = (l <= r);
     return ( lt*l + (!lt)*r );
+}
+
+int usprintf(char *buffer, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    char *buf_ptr = buffer;
+
+    while (*format) {
+        if (*format != '%') {
+            *buf_ptr++ = *format++;
+            continue;
+        }
+
+        format++; // Skip '%'
+
+        // Parse alignment
+        bool left_align = false;
+        if (*format == '-') {
+            left_align = true;
+            format++;
+        }
+
+        // Parse width
+        int width = 0;
+        while (*format >= '0' && *format <= '9') {
+            width = width * 10 + (*format++ - '0');
+        }
+
+        // Parse format specifier
+        switch (*format) {
+            case 'c': {
+                char c = (char)va_arg(args, int);
+                int len = 1;
+
+                if (!left_align) {
+                    int i;for(i = 0; i < width - len; i++) *buf_ptr++ = ' ';
+                }
+                *buf_ptr++ = c;
+                if (left_align) {
+                    int i;for(i = 0; i < width - len; i++) *buf_ptr++ = ' ';
+                }
+                break;
+            }
+
+            case 's': {
+                char *str = va_arg(args, char*);
+                int len = 0;
+                char *temp = str;
+                while (*temp++) len++;
+
+                if (!left_align) {
+                    int i;for(i = 0; i < width - len; i++) *buf_ptr++ = ' ';
+                }
+                while (*str) *buf_ptr++ = *str++;
+                if (left_align) {
+                    int i;for(i = 0; i < width - len; i++) *buf_ptr++ = ' ';
+                }
+                break;
+            }
+
+            case 'd': {
+                int32_t value = va_arg(args, int32_t);
+                char num_buf[12];
+                int i = 0;
+                bool negative = false;
+
+                if (value < 0) {
+                    negative = true;
+                    value = -value;
+                }
+
+                // Convert digits (reverse order)
+                do {
+                    num_buf[i++] = '0' + (value % 10);
+                    value /= 10;
+                } while (value > 0);
+
+                if (negative) {
+                    num_buf[i++] = '-';
+                }
+
+                int len = i;
+
+                if (!left_align) {
+                    int j;for (j = 0; j < width - len; j++) *buf_ptr++ = ' ';
+                }
+                // Print in correct order
+                int j;for (j = i - 1; j >= 0; j--) {
+                    *buf_ptr++ = num_buf[j];
+                }
+                if (left_align) {
+                    int j;for (j = 0; j < width - len; j++) *buf_ptr++ = ' ';
+                }
+                break;
+            }
+
+            case 'x': {
+                uint32_t value = va_arg(args, uint32_t);
+                char num_buf[9];
+                int i = 0;
+
+                // Convert to hex (reverse order)
+                do {
+                    uint8_t digit = value & 0xF;
+                    num_buf[i++] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+                    value >>= 4;
+                } while (value > 0);
+
+                int len = i;
+
+                if (!left_align) {
+                    int j;for (j = 0; j < width - len; j++) *buf_ptr++ = ' ';
+                }
+                // Print in correct order
+                int j;for (j = i - 1; j >= 0; j--) {
+                    *buf_ptr++ = num_buf[j];
+                }
+                if (left_align) {
+                    int j;for (j = 0; j < width - len; j++) *buf_ptr++ = ' ';
+                }
+                break;
+            }
+
+            case 'f': {
+                double value = va_arg(args, double);
+                char num_buf[20];
+                bool negative = false;
+
+                // Handle sign
+                if (value < 0) {
+                    negative = true;
+                    value = -value;
+                }
+
+                // Extract integer and fractional parts
+                int32_t int_part = (int32_t)value;
+                uint32_t frac_part = (uint32_t)((value - int_part) * 1000000 + 0.5);
+
+                // Convert integer part (reverse order)
+                int int_len = 0;
+                uint32_t temp_int = int_part;
+                do {
+                    num_buf[int_len++] = '0' + (temp_int % 10);
+                    temp_int /= 10;
+                } while (temp_int > 0);
+
+                if (negative) {
+                    num_buf[int_len++] = '-';
+                }
+
+                // Calculate total length
+                int total_len = int_len + 4; // +1 for decimal point, +6 for fractional
+
+                if (!left_align) {
+                    int j;for (j = 0; j < width - total_len; j++) *buf_ptr++ = ' ';
+                }
+
+                // Print integer part (reverse)
+                int j;for (j = int_len - 1; j >= 0; j--) {
+                    *buf_ptr++ = num_buf[j];
+                }
+
+                // Print fractional part (6 digits)
+                *buf_ptr++ = '.';
+                uint32_t frac = frac_part;
+                for (j = 0; j < 3; j++) {
+                    int digit = frac / 100000;
+                    *buf_ptr++ = '0' + digit;
+                    frac = (frac % 100000) * 10;
+                }
+
+                if (left_align) {
+                    int j;for (j = 0; j < width - total_len; j++) *buf_ptr++ = ' ';
+                }
+                break;
+            }
+
+            default:
+                *buf_ptr++ = '%';
+                *buf_ptr++ = *format;
+                break;
+        }
+        format++;
+    }
+
+    *buf_ptr = '\0'; // Null terminate
+    va_end(args);
+
+    return buf_ptr - buffer; // Return number of characters written
 }

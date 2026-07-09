@@ -21,6 +21,7 @@
 #include "mm.h"
 #include "kernel.h"
 #include "tasks.h"
+#include "nvic.h"
 
 //-----------------------------------------------------------------------------
 // RTOS Defines and Kernel Variables
@@ -176,6 +177,8 @@ void startRtos(void)
     setAsp();
     tcb[taskCurrent].state = STATE_READY;
     NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE;
+    enableNvicInterrupt(INT_GPIOE);
+    enableNvicInterrupt(INT_GPIOB);
     setTMPL();
     WTIMER0_CTL_R |= TIMER_CTL_TAEN;
     idle();
