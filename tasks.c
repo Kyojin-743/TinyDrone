@@ -76,9 +76,13 @@ typedef struct { float pitch, roll, yaw; } Attitude;
 typedef struct { float x, y, z; } MagData;
 typedef struct { float x, y, z; } BaroData;
 
-Attitude attitude;
-MagData  mag_data;
-BaroData baro_data;
+typedef struct {
+    float kp, ki, kd;
+    float integral, prev_diff;
+    float min, max;
+} PidController;
+
+Vec3f attitude = {.x=0, .y=0, .z=0};
 
 //-----------------------------------------------------------------------------
 // Subroutines
@@ -148,6 +152,20 @@ void initTaskHw(void) {
     initBme280();
     nrfInit();
     nrfSetTxMode(1, (uint8_t[]){0x11,0x22,0x33,0x44,0x55});
+}
+
+float minf(float a, float b) {
+    bool s = a > b;
+    return s * b + !s * a;
+}
+
+float maxf(float a, float b) {
+    bool s = a < b;
+    return s * b + !s * a;
+}
+
+float clampf(float x, float min, float max) {
+    return minf(max, maxf(min, x));
 }
 
 #define COUNT2SEC .0000000125 //80MHz
@@ -313,6 +331,24 @@ Vec3f IMU_AHRS_update(Quaternion *q_est, const Vec3f *a, const Vec3f *g, float d
 #undef RAD2DEG
 #undef DEG2RAD
 
+//returns correction
+float pid_update(PidController *pid, float setpoint, float current, float dt) {
+    float diff = setpoint - current;
+    //proportional
+    float p = pid->kp *diff;
+
+    //integral
+    pid->integral += error * dt;
+    float i = clampf(pid->ki * pid->integral, pid->min, pid->max);
+
+    //derivative
+    float d = (diff - pid->prev_diff) / dt * pid->kd;
+    pid->prev_diff = diff;
+
+    //combine & return
+    return clampf(p + i + d, pid->min, pid->max);
+}
+
 /* ============================================================================
  *  ESTIMATE ATTITUDE   (1kHz)          (Priority: 0)
  * ============================================================================
@@ -352,6 +388,34 @@ void task_ahrs_pid(void) {
     uint8_t idx_a = 0, idx_g = 0, idx_m = 0;
     float dt_marg_s = 0.0f;
     Quaternion q_est = {1.0f, 0.0f, 0.0f, 0.0f};
+    PidController pitch_pid = {
+                               .kp=.5,
+                               .ki=.5,
+                               .kd=.5,
+                               .integral=0,
+                               .prev_diff=0,
+                               .min=-20,
+                               .max=20
+    };
+    PidController roll_pid  = {
+                               .kp=.5,
+                               .ki=.5,
+                               .kd=.5,
+                               .integral=0,
+                               .prev_diff=0,
+                               .min=-20,
+                               .max=20
+    };
+    PidController yaw_pid   = {
+                               .kp=.5,
+                               .ki=.5,
+                               .kd=.5,
+                               .integral=0,
+                               .prev_diff=0,
+                               .min=-20,
+                               .max=20
+    };
+
 
     for(;;) {
         wait(semaphore_mpu_data_ready);
@@ -389,14 +453,13 @@ void task_ahrs_pid(void) {
             //dt_s 'auto' zeros after function scope ends
         }
 
-        //HERE RUN PID
+        Vec3f setpoint;
+        atomic_read(&attitude, &setpoint, sizeof(Vec3f));
+        pid_update(&pitch_pid, setpoint.x, euler.x, dt_s);
+        pid_update(&roll_pid, setpoint.y, euler.y, dt_s);
+        pid_update(&yaw_pid, setpoint.z, euler.z, dt_s);
 
-        // pid elevation
-        // pid pitch
-        // pid roll
-        // pid yaw
-
-        //SEND PWM
+        //SET PWM
 
 
         char buffer[100];
@@ -413,12 +476,14 @@ void task_ahrs_pid(void) {
  *  Description: Receive Controller Input update PID setpoints
  *
  *  Control Flow:
- *      Sleep 20ms (50hz)
+ *      Sleep 200ms (50hz)
  *      read from nrf
  *
  * */
 void task_receive_input(void) {
     for(;;) {
+        sleep(200);
+
 
     }
 }
@@ -432,6 +497,7 @@ void task_receive_input(void) {
  * */
 void task_send_telem(void) {
     for(;;) {
+        sleep(1000);
 
     }
 }

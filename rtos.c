@@ -75,16 +75,6 @@ int main(void)
 //-----------------------------------------------------------------------------
 // Sub-Routines
 //-----------------------------------------------------------------------------
-void initCpuTimer(void)
-{
-    SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R0;
-    _delay_cycles(3);
-
-    WTIMER0_CTL_R  &= ~(TIMER_CTL_TAEN);
-    WTIMER0_CFG_R   = 0x4;
-    WTIMER0_TAMR_R  = TIMER_TAMR_TAMR_1_SHOT | TIMER_TAMR_TACDIR;
-    WTIMER0_TAV_R   = 0;
-}
 
 void initFpu(void) {
     //Allow floating point access to thread mode
