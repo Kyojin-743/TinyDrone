@@ -71,6 +71,9 @@
 #define PIN_6           0x40
 #define PIN_7           0x80
 
+#define RED_LED PORTF,1
+#define BLUE_LED PORTF,2
+
 //Drone Specific Types
 typedef struct { float pitch, roll, yaw; } Attitude;
 typedef struct { float x, y, z; } MagData;
@@ -126,6 +129,10 @@ void initTaskHw(void) {
     enablePort(PORTD);
     enablePort(PORTE);
 
+    enablePort(PORTF);
+    selectPinPushPullOutput(BLUE_LED);
+    selectPinPushPullOutput(RED_LED);
+
 //    selectPinDigitalInput(QMC5883P_INT);
     selectPinDigitalInput(MPU6050_INT); //cleared when read INT_STATUS
     selectPinDigitalInput(NRF24L01_INT);
@@ -157,8 +164,8 @@ void initTaskHw(void) {
     //PWM (Motors)
 
     //MODULES
-    qmc_init();
     mpu_init();
+    qmc_init();
     initBme280();
     nrfInit();
     nrfSetTxMode(1, (uint8_t[]){0x11,0x22,0x33,0x44,0x55});
@@ -453,12 +460,14 @@ void task_ahrs_pid(void) {
         Vec3f euler;
         float dt_s = deltaSeconds();
         //Run the Full 9DOF MARG AHRS Update
-        if(data & QMC5883P_STAT_DRDY && !(data & QMC5883P_STAT_DRDY)) {
+        if(data & QMC5883P_STAT_DRDY && !(data & QMC5883P_STAT_OVFL)) {
+            setPinValue(BLUE_LED, 1);
             euler = MARG_AHRS_update(&q_est, &accel, &gyro, &mag, dt_marg_s);
             dt_marg_s = 0;
         }
         //Run the Partial 6DOF IMU AHRS Update
         else {
+            setPinValue(BLUE_LED, 0);
             euler = IMU_AHRS_update(&q_est, &accel, &gyro, dt_s);
             //dt_s 'auto' zeros after function scope ends
         }
@@ -469,58 +478,58 @@ void task_ahrs_pid(void) {
         float roll_correction = pid_update(&roll_pid, setpoint.y, euler.y, dt_s);
         float yaw_correction = pid_update(&yaw_pid, setpoint.z, euler.z, dt_s);
 
-        //SET PWM
-        bool _armed;
-        atomic_read(&armed, &_armed, sizeof(bool));
-        if(!_armed) {
-            pwm0 = 0;
-            pwm1 = 0;
-            pwm2 = 0;
-            pwm3 = 0;
-            continue;
-        }
-
-        /*
-         *         Front
-         *
-         *  (PWM0)       (PWM1)
-         *      O          O
-         *       \        /
-         *        +------+
-         *        |  /\  |
-         *        |  ||  |
-         *        +------+
-         *       /        \
-         *      O          O
-         *  (PWM2)       (PWM3)
-         *
-         *          Back
-         */
-
-
-        //MIGHT NEED TO CHANGE SIGN OF THESE
-        if(pitch_correction > 0) {
-            pwm0 += 100;
-            pwm1 += 100;
-            pwm2 -= 100;
-            pwm3 -= 100;
-        } else {
-            pwm0 -= 100;
-            pwm1 -= 100;
-            pwm2 += 100;
-            pwm3 += 100;
-        }
-        if(roll_correction > 0) {
-            pwm0 += 100;
-            pwm1 -= 100;
-            pwm2 += 100;
-            pwm3 -= 100;
-        } else {
-            pwm0 -= 100;
-            pwm1 += 100;
-            pwm2 -= 100;
-            pwm3 += 100;
-        }
+        //SET PWM (NOT FINISHED OR being used yet)
+//        bool _armed;
+//        atomic_read(&armed, &_armed, sizeof(bool));
+//        if(!_armed) {
+//            pwm0 = 0;
+//            pwm1 = 0;
+//            pwm2 = 0;
+//            pwm3 = 0;
+//            continue;
+//        }
+//
+//        /*
+//         *         Front
+//         *
+//         *  (PWM0)       (PWM1)
+//         *      O          O
+//         *       \        /
+//         *        +------+
+//         *        |  /\  |
+//         *        |  ||  |
+//         *        +------+
+//         *       /        \
+//         *      O          O
+//         *  (PWM2)       (PWM3)
+//         *
+//         *          Back
+//         */
+//
+//
+//        //MIGHT NEED TO CHANGE SIGN OF THESE AND AMOUNT to reflect amount of correction
+//        if(pitch_correction > 0) {
+//            pwm0 += 100;
+//            pwm1 += 100;
+//            pwm2 -= 100;
+//            pwm3 -= 100;
+//        } else {
+//            pwm0 -= 100;
+//            pwm1 -= 100;
+//            pwm2 += 100;
+//            pwm3 += 100;
+//        }
+//        if(roll_correction > 0) {
+//            pwm0 += 100;
+//            pwm1 -= 100;
+//            pwm2 += 100;
+//            pwm3 -= 100;
+//        } else {
+//            pwm0 -= 100;
+//            pwm1 += 100;
+//            pwm2 -= 100;
+//            pwm3 += 100;
+//        }
 //        if(yaw_correction > 0) {
 //            pwm0 -= 100;
 //            pwm1 -= 100;
@@ -532,18 +541,17 @@ void task_ahrs_pid(void) {
 //            pwm2 += 100;
 //            pwm3 += 100;
 //        }
-
-        //        if(elevation > 0) {
-        //            pwm0 += 100;
-        //            pwm1 += 100;
-        //            pwm2 += 100;
-        //            pwm3 += 100;
-        //        } else {
-        //            pwm0 -= 100;
-        //            pwm1 -= 100;
-        //            pwm2 -= 100;
-        //            pwm3 -= 100;
-        //        }
+//        if(elevation > 0) {
+//            pwm0 += 100;
+//            pwm1 += 100;
+//            pwm2 += 100;
+//            pwm3 += 100;
+//        } else {
+//            pwm0 -= 100;
+//            pwm1 -= 100;
+//            pwm2 -= 100;
+//            pwm3 -= 100;
+//        }
 
 
 

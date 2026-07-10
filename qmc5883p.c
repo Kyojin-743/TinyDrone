@@ -11,7 +11,8 @@
 #include "wait.h"
 
 bool qmc_verify(void) {
-    return QMC5883P_CHIPID_ID == readI2c1Register(QMC5883P_ADDR, QMC5883P_CHIPID_R);
+    uint8_t id = readI2c1Register(QMC5883P_ADDR, QMC5883P_CHIPID_R);
+    return QMC5883P_CHIPID_ID == id;
 }
 
 void qmc_clear_int(void) {
