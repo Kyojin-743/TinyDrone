@@ -86,10 +86,11 @@ typedef struct {
 typedef struct {
     uint8_t rx, ry, lx, ly;
     uint8_t flags;
-    uint8_t [MAX_NRF_PACKET_SIZE - 5] reserved; //always 0
+    uint8_t reserved[MAX_NRF_PACKET_SIZE - 5] ; //always 0
 } NRF_Packet;
 
 Vec3f attitude = {.x=0, .y=0, .z=0};
+bool armed = false;
 
 //-----------------------------------------------------------------------------
 // Subroutines
@@ -152,6 +153,8 @@ void initTaskHw(void) {
     WTIMER3_TBMR_R  = TIMER_TBMR_TBMR_1_SHOT | TIMER_TBMR_TBCDIR;
     WTIMER3_TBV_R   = 0;
     WTIMER3_CTL_R  |= TIMER_CTL_TBEN;
+
+    //PWM (Motors)
 
     //MODULES
     qmc_init();
@@ -345,7 +348,7 @@ float pid_update(PidController *pid, float setpoint, float current, float dt) {
     float p = pid->kp *diff;
 
     //integral
-    pid->integral += error * dt;
+    pid->integral += diff * dt;
     float i = clampf(pid->ki * pid->integral, pid->min, pid->max);
 
     //derivative
@@ -422,8 +425,7 @@ void task_ahrs_pid(void) {
                                .min=-20,
                                .max=20
     };
-    float pwm0 = {}, pwm1 = {}, pwm2 = {}, pwm3 = {};
-
+    float pwm0 = 0.0f, pwm1 = 0.0f, pwm2 = 0.0f, pwm3 = 0.0f;
 
     for(;;) {
         wait(semaphore_mpu_data_ready);
@@ -468,16 +470,95 @@ void task_ahrs_pid(void) {
         float yaw_correction = pid_update(&yaw_pid, setpoint.z, euler.z, dt_s);
 
         //SET PWM
-        if(pitch_correction > 0) {
-
-        } else {
-
+        bool _armed;
+        atomic_read(&armed, &_armed, sizeof(bool));
+        if(!_armed) {
+            pwm0 = 0;
+            pwm1 = 0;
+            pwm2 = 0;
+            pwm3 = 0;
+            continue;
         }
 
+        /*
+         *         Front
+         *
+         *  (PWM0)       (PWM1)
+         *      O          O
+         *       \        /
+         *        +------+
+         *        |  /\  |
+         *        |  ||  |
+         *        +------+
+         *       /        \
+         *      O          O
+         *  (PWM2)       (PWM3)
+         *
+         *          Back
+         */
 
-        char buffer[100];
-        usprintf(buffer, "%f,%f,%f\n", euler.x, euler.y, euler.z);
-        putsUart0(buffer);
+
+        //MIGHT NEED TO CHANGE SIGN OF THESE
+        if(pitch_correction > 0) {
+            pwm0 += 100;
+            pwm1 += 100;
+            pwm2 -= 100;
+            pwm3 -= 100;
+        } else {
+            pwm0 -= 100;
+            pwm1 -= 100;
+            pwm2 += 100;
+            pwm3 += 100;
+        }
+        if(roll_correction > 0)
+            pwm0 += 100;
+            pwm1 -= 100;
+            pwm2 += 100;
+            pwm3 -= 100;
+        } else {
+            pwm0 -= 100;
+            pwm1 += 100;
+            pwm2 -= 100;
+            pwm3 += 100;
+        }
+//        if(yaw_correction > 0) {
+//            pwm0 -= 100;
+//            pwm1 -= 100;
+//            pwm2 += 100;
+//            pwm3 += 100;
+//        } else {
+//            pwm0 -= 100;
+//            pwm1 -= 100;
+//            pwm2 += 100;
+//            pwm3 += 100;
+        }
+
+        //        if(elevation > 0) {
+        //            pwm0 += 100;
+        //            pwm1 += 100;
+        //            pwm2 += 100;
+        //            pwm3 += 100;
+        //        } else {
+        //            pwm0 -= 100;
+        //            pwm1 -= 100;
+        //            pwm2 -= 100;
+        //            pwm3 -= 100;
+        //        }
+
+
+
+
+        //===============================
+        //DEBUG
+        //===============================
+        {
+            char buffer[100];
+            usprintf(buffer, "%f,%f,%f\n", euler.x, euler.y, euler.z);
+            putsUart0(buffer);
+        }
+        //===============================
+        //DEBUG
+        //===============================
 
     }//END FOR LOOP
 }//END TASK
