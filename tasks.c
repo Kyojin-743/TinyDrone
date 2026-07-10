@@ -26,7 +26,6 @@
  *  Notes:
  *      With the clock at 80Mhz, trying to run the ahrs and pid both at 1kHz, that leaves 80k total clocks in 1kHz
  *
- *
  */
 
 //C-Std Lib.
@@ -122,13 +121,26 @@ void initTaskHw(void) {
     selectPinPushPullOutput(NRF24L01_CE);
 
     selectPinInterruptRisingEdge(MPU6050_INT);
-//    selectPinInterruptHighLevel(QMC5883P_INT);
     selectPinInterruptFallingEdge(NRF24L01_INT);
 
     enablePinInterrupt(MPU6050_INT);
-//    enablePinInterrupt(QMC5883P_INT);
     enablePinInterrupt(NRF24L01_INT);
 
+    //Stopwatch
+    SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R3;
+    _delay_cycles(3);
+
+    WTIMER3_CTL_R  &= ~(TIMER_CTL_TAEN);
+    WTIMER3_CFG_R   = 0x4;
+    WTIMER3_TAMR_R  = TIMER_TAMR_TAMR_1_SHOT | TIMER_TAMR_TACDIR;
+    WTIMER3_TAV_R   = 0;
+    WTIMER3_CTL_R  |= TIMER_CTL_TAEN;
+
+    WTIMER3_CTL_R  &= ~(TIMER_CTL_TBEN);
+    WTIMER3_CFG_R   = 0x4;
+    WTIMER3_TBMR_R  = TIMER_TBMR_TBMR_1_SHOT | TIMER_TBMR_TBCDIR;
+    WTIMER3_TBV_R   = 0;
+    WTIMER3_CTL_R  |= TIMER_CTL_TBEN;
 
     //MODULES
     qmc_init();
@@ -140,8 +152,8 @@ void initTaskHw(void) {
 
 #define COUNT2SEC .0000000125 //80MHz
 float deltaSeconds(void) {
-    uint32_t counts = WTIMER0_TAV_R;
-    WTIMER0_TAV_R = 0;
+    uint32_t counts = WTIMER3_TAV_R;
+    WTIMER3_TAV_R = 0;
     return ((float)counts) * COUNT2SEC;
 }
 
@@ -376,6 +388,16 @@ void task_ahrs_pid(void) {
             euler = IMU_AHRS_update(&q_est, &accel, &gyro, dt_s);
             //dt_s 'auto' zeros after function scope ends
         }
+
+        //HERE RUN PID
+
+        // pid elevation
+        // pid pitch
+        // pid roll
+        // pid yaw
+
+        //SEND PWM
+
 
         char buffer[100];
         usprintf(buffer, "%f,%f,%f\n", euler.x, euler.y, euler.z);
