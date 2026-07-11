@@ -66,7 +66,7 @@
 #include "qmc5883p.h"
 #include "bme280.h"
 
-#define DEBUG_SERIAL_PRINTING 0
+#define DEBUG_SERIAL_PRINTING 1
 
 #define NRF24L01_CE     PORTA,2
 #define NRF24L01_CSN    PORTA,3
@@ -618,7 +618,7 @@ void task_receive_input(void) {
     uint8_t channel = 1;
     uint8_t *addr  = (uint8_t[]){0x11,0x22,0x33,0x44,0x55};
     NRF_Packet pack = {0};
-    uint8_t arming_state = ARM_STATE_UNARMED, debounce_count = 0;
+    uint8_t arming_state = ARM_STATE_ARMED, debounce_count = 0;
 
     nrfSetRxMode(channel, addr);
 
