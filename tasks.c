@@ -11,12 +11,6 @@
 
 // Hardware configuration:
 // nRF24L01+ Wireless Transceiver Module on Spi2
-//   MOSI (SSI0Tx)  on PD3
-//   MISO (SSI0Rx)  on PD2
-//   SCLK (SSI0Clk) on PD0
-//   CSN  (SSI0FSs) on PD1
-//   CE   (Rx | Tx) on PE3
-//   IRQ  (INT)     on PB5
 
 /*
  * Sources:
@@ -66,11 +60,12 @@
 #include "qmc5883p.h"
 #include "bme280.h"
 
-#define DEBUG_SERIAL_PRINTING 1
+#define DEBUG_SERIAL_PRINTING 0
 
 #define NRF24L01_CE     PORTA,2
 #define NRF24L01_CSN    PORTA,3
 #define NRF24L01_INT    PORTA,4
+
 //#define I2C1SCL PORTA,6
 //#define I2C1SDA PORTA,7
 
@@ -96,9 +91,13 @@
 
 //Number packets to receive while joystick is in a held postion for state transition before changing state
 //Because packets are received at 1Hz, this count roughly maps to seconds held
-#define ARMING_DEBOUNCE 5
-#define ARMED_DEBOUNCE 4
-#define UNARMED_DEBOUNCE 10
+#define ARMING_DEBOUNCE     5
+#define ARMED_DEBOUNCE      4
+#define UNARMED_DEBOUNCE    10
+
+#define ARMING_OFF_POS      0
+#define ARMING_REST_POS     128
+#define ARMING_ON_POS       150
 
 //-----------------------------------------------------------------------------
 // Structs and Enums
@@ -215,7 +214,6 @@ void task_ahrs_pid(void) {
     uint16_t pwm0 = 0.0f, pwm1 = 0.0f, pwm2 = 0.0f, pwm3 = 0.0f;
 
     for(;;) {
-
         //Allow arming sequence to run, ignore mpu data
         bool _armed;
         uint8_t _arm_state;
@@ -302,16 +300,27 @@ void task_receive_input(void) {
     uint8_t *addr  = (uint8_t[]){0x11,0x22,0x33,0x44,0x55};
     NRF_Packet pack = {0};
     uint8_t _arming_state = ARM_STATE_UNARMED, debounce_count = 0;
-    uint8_t fake_payload_state = ARM_STATE_UNARMED, fake_count = 0;
+//    uint8_t fake_payload_state = ARM_STATE_UNARMED, fake_count = 0;
 
     nrfSetRxMode(channel, addr);
+    uint8_t ch = nrfReadReg(RF_CH);
+    ch = nrfReadReg(0xA);
+    ch = nrfReadReg(0xB);
+    ch = nrfReadReg(0xC);
+    ch = nrfReadReg(0xD);
+    ch = nrfReadReg(0xE);
 
     for(;;) {
         sleep(200);
         lock(mutex_bus_spi);
         nrfQuickRxMode();
-//        nrfReadRxPayload((uint8_t*)&pack);
-        pack = fake_arming_and_keep(&fake_payload_state, &fake_count);
+        nrfReadRxPayload((uint8_t*)&pack);
+        char buffer[50];
+        usprintf(buffer, "Pckt: %d, %d, %d, %d\n", pack.rx, pack.ry, pack.lx , pack.ly);
+        putsUart0(SAVE_POS);
+        putsUart0(buffer);
+        putsUart0(RETURN_2_POS);
+//        pack = fake_arming_and_keep(&fake_payload_state, &fake_count);
 
         //handle arming
         Vec3f set = {0};
@@ -473,10 +482,10 @@ void initTaskHw(void) {
     PWM0_3_LOAD_R = 1023;
     PWM1_0_LOAD_R = 1023;
 
-    PWM0_3_CMPA_R = 512;
-    PWM0_3_CMPB_R = 512;
-    PWM1_0_CMPA_R = 512;
-    PWM1_0_CMPB_R = 512;
+    PWM0_3_CMPA_R = 0;
+    PWM0_3_CMPB_R = 0;
+    PWM1_0_CMPA_R = 0;
+    PWM1_0_CMPB_R = 0;
 
     //Turn on Generators
     PWM0_3_CTL_R = PWM_0_CTL_ENABLE;
@@ -486,10 +495,8 @@ void initTaskHw(void) {
     PWM1_SYNC_R = PWM_SYNC_SYNC0;
 
     //Enable Outputs
-    PWM0_ENABLE_R |= PWM_ENABLE_PWM3EN;
-    PWM1_ENABLE_R |= PWM_ENABLE_PWM0EN;
-
-    for(;;);
+    PWM0_ENABLE_R |= PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN;
+    PWM1_ENABLE_R |= PWM_ENABLE_PWM0EN | PWM_ENABLE_PWM1EN;
 
     //MODULES
     mpu_init();
@@ -723,7 +730,7 @@ void arm_seq_update(uint8_t *arming_state, uint8_t *debounce, const NRF_Packet *
     //Wait for joystick to go to down position for x debounce counts
     case ARM_STATE_UNARMED: {
         // needs to be in down position continuously to advance state
-        if(pack->ly == -127) (*debounce)++;
+        if(pack->ly == ARMING_OFF_POS) (*debounce)++;
         else *debounce = 0;
 
         //Once reached -> advance state ; else stay
@@ -736,7 +743,7 @@ void arm_seq_update(uint8_t *arming_state, uint8_t *debounce, const NRF_Packet *
     //Wait for joystick to go to above resting position for y debounce counts
     case ARM_STATE_ARMING: {
         // needs to be in up position continuously to advance state
-        if(pack->ly > 0) (*debounce)++;
+        if(pack->ly > ARMING_ON_POS) (*debounce)++;
         else *debounce = 0;
 
         //Once reached -> advance state ; else stay
@@ -746,7 +753,7 @@ void arm_seq_update(uint8_t *arming_state, uint8_t *debounce, const NRF_Packet *
     //Wait for joystick to be at rest for z debounce counts
     case ARM_STATE_ARMED: {
         // needs to be in middle(0) position continuously to advance state
-        if(pack->ly == -127) (*debounce)++;
+        if(pack->ly <= ARMING_REST_POS) (*debounce)++;
         else *debounce = 0;
 
         //Once reached -> advance state ; else stay

@@ -59,9 +59,9 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok &= createThread(idle, "Idle", 7, 512);
-    ok &= createThread(task_ahrs_pid,"attitude", 0, ceil512(2000));
+//    ok &= createThread(task_ahrs_pid,"attitude", 0, ceil512(2000));
     ok &= createThread(task_receive_input, "rc", 2, ceil512(1000));
-    ok &= createThread(task_send_telem, "telem", 2, ceil512(500));
+//    ok &= createThread(task_send_telem, "telem", 2, ceil512(500));
 
     // Start up RTOS
     if (ok)
